@@ -9,10 +9,17 @@ from werkzeug.security import check_password_hash
 from flask_cors import CORS
 from datetime import timedelta, datetime
 from apscheduler.schedulers.background import BackgroundScheduler
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 import re
 
 app = Flask(__name__)
 
+limiter = Limiter(
+    app,
+    key_func=get_remote_address,
+    default_limits=["500 per day", "100 per hour", "10 per minute"]
+)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:123@localhost/tasks'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JWT_SECRET_KEY'] = 'your_secret_key_here'
@@ -32,7 +39,6 @@ def is_valid_password(password):
     if len(password) < 6:
         return False
 
-    # Check if the password contains at least one uppercase and one lowercase character
     if not re.search(r'[A-Z]', password) or not re.search(r'[a-z]', password):
         return False
 
@@ -64,7 +70,8 @@ def register():
 
     if not is_valid_password(password):
         return jsonify({
-            "msg": "Password should be at least 6 characters long with at least one uppercase and one lowercase character"}), 400
+            "msg": "Password should be at least 6 characters long with at least one uppercase and one lowercase "
+                   "character"}), 400
 
     if User.query.filter_by(username=username).first():
         return jsonify({"msg": "Username already exists"}), 400
@@ -95,6 +102,7 @@ def login():
 
 @app.route('/users/<int:user_id>', methods=['GET'])
 @jwt_required()
+@limiter.limit("20 per minute")
 def get_user(user_id):
     user = User.query.get(user_id)
     if user:
@@ -105,6 +113,7 @@ def get_user(user_id):
 
 @app.route('/users/<int:user_id>', methods=['PUT'])
 @jwt_required()
+@limiter.limit("20 per minute")
 def update_user(user_id):
     user = User.query.get(user_id)
     if not user:
@@ -120,6 +129,7 @@ def update_user(user_id):
 
 @app.route('/users/<int:user_id>', methods=['DELETE'])
 @jwt_required()
+@limiter.limit("20 per minute")
 def delete_user(user_id):
     user = User.query.get(user_id)
     if not user:
