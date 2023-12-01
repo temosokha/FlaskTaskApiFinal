@@ -37,18 +37,18 @@ def create_task(client, token, title, description, due_date, priority=1, status=
 
 
 def test_register_and_login(client):
-    response = register_user(client, 'test_user', 'password')
+    response = register_user(client, 'test_user', '27015Juve')
     assert response.status_code == 201
 
-    response = login_user(client, 'test_user', 'password')
+    response = login_user(client, 'test_user', '27015Juve')
     assert response.status_code == 200
     data = json.loads(response.data)
     assert 'access_token' in data
 
 
 def test_create_task(client):
-    register_user(client, 'test_manager', 'password', 'manager')
-    login_response = login_user(client, 'test_manager', 'password')
+    register_user(client, 'test_manager', '27015Juve', 'manager')
+    login_response = login_user(client, 'test_manager', '27015Juve')
     assert login_response.status_code == 200
     login_data = json.loads(login_response.data)
     access_token = login_data['access_token']
@@ -58,8 +58,8 @@ def test_create_task(client):
 
 
 def test_get_tasks(client):
-    register_user(client, 'test_worker', 'password', 'manager')
-    login_response = login_user(client, 'test_worker', 'password')
+    register_user(client, 'test_worker', '27015Juve', 'manager')
+    login_response = login_user(client, 'test_worker', '27015Juve')
     assert login_response.status_code == 200
     login_data = json.loads(login_response.data)
     access_token = login_data['access_token']
@@ -83,7 +83,7 @@ def create_test_user_and_login(client, username, password, role='worker'):
 
 
 def test_get_user(client):
-    access_token = create_test_user_and_login(client, 'test_user_get', 'password', 'worker')
+    access_token = create_test_user_and_login(client, 'test_user_get', '27015Juve', 'worker')
 
     headers = {'Authorization': f'Bearer {access_token}'}
     response = client.get('/users/1', headers=headers)
@@ -94,9 +94,9 @@ def test_get_user(client):
 
 
 def test_update_user(client):
-    access_token = create_test_user_and_login(client, 'test_user_update', 'password', 'worker')
+    access_token = create_test_user_and_login(client, 'test_user_update', '27015Juve', 'worker')
 
-    new_password = 'new_password'
+    new_password = '27015Juven'
     headers = {'Authorization': f'Bearer {access_token}'}
     response = client.put('/users/1', json={'password': new_password}, headers=headers)
     assert response.status_code == 200
@@ -106,18 +106,18 @@ def test_update_user(client):
 
 
 def test_delete_user(client):
-    access_token = create_test_user_and_login(client, 'test_user_delete', 'password', 'worker')
+    access_token = create_test_user_and_login(client, 'test_user_delete', '27015Juve', 'worker')
 
     headers = {'Authorization': f'Bearer {access_token}'}
     response = client.delete('/users/1', headers=headers)
     assert response.status_code == 200
 
-    login_response = login_user(client, 'test_user_delete', 'password')
+    login_response = login_user(client, 'test_user_delete', '27015Juve')
     assert login_response.status_code == 401
 
 
 def test_mark_task_completed(client):
-    manager_access_token = create_test_user_and_login(client, 'test_manager', 'password', 'manager')
+    manager_access_token = create_test_user_and_login(client, 'test_manager', '27015Juve', 'manager')
 
     create_task(client, manager_access_token, 'Test Task', 'Task description', '2023-12-31')
 
@@ -137,7 +137,7 @@ def test_mark_task_completed(client):
 
 
 def test_task_operations(client):
-    manager_access_token = create_test_user_and_login(client, 'test_manager', 'password', 'manager')
+    manager_access_token = create_test_user_and_login(client, 'test_manager', '27015Juve', 'manager')
 
     create_task(client, manager_access_token, 'Test Task', 'Task description', '2023-12-31')
 
