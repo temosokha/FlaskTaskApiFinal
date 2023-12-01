@@ -9,6 +9,7 @@ from werkzeug.security import check_password_hash
 from flask_cors import CORS
 from datetime import timedelta, datetime
 from apscheduler.schedulers.background import BackgroundScheduler
+import re
 
 app = Flask(__name__)
 
@@ -25,6 +26,17 @@ with app.app_context():
 
 migrate = Migrate(app, db)
 scheduler = BackgroundScheduler()
+
+
+def is_valid_password(password):
+    if len(password) < 6:
+        return False
+
+    # Check if the password contains at least one uppercase and one lowercase character
+    if not re.search(r'[A-Z]', password) or not re.search(r'[a-z]', password):
+        return False
+
+    return True
 
 
 def check_task_due_dates():
@@ -49,6 +61,11 @@ def register():
 
     if username is None or password is None:
         return jsonify({"msg": "Missing username or password"}), 400
+
+    if not is_valid_password(password):
+        return jsonify({
+            "msg": "Password should be at least 6 characters long with at least one uppercase and one lowercase character"}), 400
+
     if User.query.filter_by(username=username).first():
         return jsonify({"msg": "Username already exists"}), 400
 
@@ -217,7 +234,6 @@ def task_operations(task_id):
         db.session.delete(task)
         db.session.commit()
         return jsonify({'message': 'Task deleted'})
-
 
 
 SWAGGER_URL = '/swagger'

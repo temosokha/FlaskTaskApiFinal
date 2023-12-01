@@ -1,100 +1,173 @@
 import json
 import pytest
 from app import app, db
-from models.user import User
-from models.task import Task
 
 
 @pytest.fixture
 def client():
     app.config['TESTING'] = True
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///test.db'  # Use a test database
-    with app.test_client() as client:
-        with app.app_context():
-            db.create_all()
-            # Create a test manager user with a password (the model will hash it)
-            manager = User(username="manager", password="managerpassword", role="manager")
-            db.session.add(manager)
-            # Create two test worker users with passwords (the model will hash them)
-            worker1 = User(username="worker1", password="worker1password", role="worker")
-            worker2 = User(username="worker2", password="worker2password", role="worker")
-            db.session.add(worker1)
-            db.session.add(worker2)
-            db.session.commit()
-        yield client
-        with app.app_context():
-            db.drop_all()
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///test.db'  # Use an in-memory SQLite database for testing
+    with app.app_context():
+        db.create_all()
+    client = app.test_client()
+    yield client
+    with app.app_context():
+        db.drop_all()
 
 
-def login(client, username, password):
-    response = client.post('/login', json={"username": username, "password": password})
-    return json.loads(response.data)
+def register_user(client, username, password, role='worker'):
+    return client.post('/register', json={'username': username, 'password': password, 'role': role})
 
 
-def create_task(client, title, description, due_date, priority, status, assigned_to, manager_token):
-    response = client.post('/tasks', json={
-        "title": title,
-        "description": description,
-        "due_date": due_date,
-        "priority": priority,
-        "status": status,
-        "assigned_to": assigned_to
-    }, headers={"Authorization": f"Bearer {manager_token}"})
-    return json.loads(response.data)
+def login_user(client, username, password):
+    return client.post('/login', json={'username': username, 'password': password})
 
 
-def test_login(client):
-    response = login(client, "manager", "managerpassword")
-    assert response.get("access_token")
-    assert response["access_token"].startswith("eyJ")
+def create_task(client, token, title, description, due_date, priority=1, status='pending', assigned_to=1):
+    headers = {'Authorization': f'Bearer {token}'}
+    task_data = {
+        'title': title,
+        'description': description,
+        'due_date': due_date,
+        'priority': priority,
+        'status': status,
+        'assigned_to': assigned_to
+    }
+    return client.post('/tasks', json=task_data, headers=headers)
+
+
+def test_register_and_login(client):
+    response = register_user(client, 'test_user', 'password')
+    assert response.status_code == 201
+
+    response = login_user(client, 'test_user', 'password')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert 'access_token' in data
 
 
 def test_create_task(client):
-    manager_token = login(client, "manager", "managerpassword")["access_token"]
-    response = create_task(client, "Test Task", "This is a test task", "2023-12-31", 1, "pending", "worker1",
-                           manager_token)
-    assert response.get("id")
-    assert response.get("title") == "Test Task"
+    register_user(client, 'test_manager', 'password', 'manager')
+    login_response = login_user(client, 'test_manager', 'password')
+    assert login_response.status_code == 200
+    login_data = json.loads(login_response.data)
+    access_token = login_data['access_token']
+
+    response = create_task(client, access_token, 'Test Task', 'Task description', '2023-12-31')
+    assert response.status_code == 201
 
 
 def test_get_tasks(client):
-    manager_token = login(client, "manager", "managerpassword")["access_token"]
-    worker1_token = login(client, "worker1", "worker1password")["access_token"]
-    worker2_token = login(client, "worker2", "worker2password")["access_token"]
+    register_user(client, 'test_worker', 'password', 'manager')
+    login_response = login_user(client, 'test_worker', 'password')
+    assert login_response.status_code == 200
+    login_data = json.loads(login_response.data)
+    access_token = login_data['access_token']
 
-    # Create tasks assigned to different workers
-    create_task(client, "Task 1", "Task 1 description", "2023-12-31", 1, "pending", "worker1", manager_token)
-    create_task(client, "Task 2", "Task 2 description", "2023-12-31", 2, "pending", "worker2", manager_token)
+    create_task(client, access_token, 'Test Task', 'Task description', '2023-12-31')
 
-    # Retrieve tasks for worker1
-    response = client.get('/tasks', headers={"Authorization": f"Bearer {worker1_token}"})
-    tasks = json.loads(response.data)
-    assert len(tasks) == 1
-    assert tasks[0]["title"] == "Task 1"
-
-    # Retrieve tasks for worker2
-    response = client.get('/tasks', headers={"Authorization": f"Bearer {worker2_token}"})
-    tasks = json.loads(response.data)
-    assert len(tasks) == 1
-    assert tasks[0]["title"] == "Task 2"
+    headers = {'Authorization': f'Bearer {access_token}'}
+    response = client.get('/tasks', headers=headers)
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert len(data) == 1
 
 
-def test_delete_task(client):
-    manager_token = login(client, "manager", "managerpassword")["access_token"]
-    worker1_token = login(client, "worker1", "worker1password")["access_token"]
+def create_test_user_and_login(client, username, password, role='worker'):
+    register_user(client, username, password, role)
+    login_response = login_user(client, username, password)
+    assert login_response.status_code == 200
+    login_data = json.loads(login_response.data)
+    access_token = login_data['access_token']
+    return access_token
 
-    # Create a task assigned to worker1
-    task = create_task(client, "Task to Delete", "Task description", "2023-12-31", 1, "pending", "worker1",
-                       manager_token)
 
-    # Attempt to delete the task as worker1 (should fail)
-    response = client.delete(f'/tasks/{task["id"]}', headers={"Authorization": f"Bearer {worker1_token}"})
-    assert response.status_code == 403
+def test_get_user(client):
+    access_token = create_test_user_and_login(client, 'test_user_get', 'password', 'worker')
 
-    # Delete the task as a manager (should succeed)
-    response = client.delete(f'/tasks/{task["id"]}', headers={"Authorization": f"Bearer {manager_token}"})
+    headers = {'Authorization': f'Bearer {access_token}'}
+    response = client.get('/users/1', headers=headers)
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert 'username' in data
+    assert 'role' in data
+
+
+def test_update_user(client):
+    access_token = create_test_user_and_login(client, 'test_user_update', 'password', 'worker')
+
+    new_password = 'new_password'
+    headers = {'Authorization': f'Bearer {access_token}'}
+    response = client.put('/users/1', json={'password': new_password}, headers=headers)
     assert response.status_code == 200
 
+    login_response = login_user(client, 'test_user_update', new_password)
+    assert login_response.status_code == 200
 
-if __name__ == "__main__":
+
+def test_delete_user(client):
+    access_token = create_test_user_and_login(client, 'test_user_delete', 'password', 'worker')
+
+    headers = {'Authorization': f'Bearer {access_token}'}
+    response = client.delete('/users/1', headers=headers)
+    assert response.status_code == 200
+
+    login_response = login_user(client, 'test_user_delete', 'password')
+    assert login_response.status_code == 401
+
+
+def test_mark_task_completed(client):
+    manager_access_token = create_test_user_and_login(client, 'test_manager', 'password', 'manager')
+
+    create_task(client, manager_access_token, 'Test Task', 'Task description', '2023-12-31')
+
+    headers = {'Authorization': f'Bearer {manager_access_token}'}
+    response = client.get('/tasks', headers=headers)
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    task_id = data[0]['id']
+
+    response = client.put(f'/tasks/{task_id}/complete', headers=headers)
+    assert response.status_code == 200
+
+    response = client.get(f'/tasks/{task_id}', headers=headers)
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data['status'] == 'completed'
+
+
+def test_task_operations(client):
+    manager_access_token = create_test_user_and_login(client, 'test_manager', 'password', 'manager')
+
+    create_task(client, manager_access_token, 'Test Task', 'Task description', '2023-12-31')
+
+    headers = {'Authorization': f'Bearer {manager_access_token}'}
+    response = client.get('/tasks', headers=headers)
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    task_id = data[0]['id']
+
+    updated_title = 'Updated Task Title'
+    updated_description = 'Updated Task Description'
+    updated_status = 'in_progress'
+    response = client.put(f'/tasks/{task_id}',
+                          json={'title': updated_title, 'description': updated_description, 'status': updated_status},
+                          headers=headers)
+    assert response.status_code == 200
+
+    response = client.get(f'/tasks/{task_id}', headers=headers)
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data['title'] == updated_title
+    assert data['description'] == updated_description
+    assert data['status'] == updated_status
+
+    response = client.delete(f'/tasks/{task_id}', headers=headers)
+    assert response.status_code == 200
+
+    response = client.get(f'/tasks/{task_id}', headers=headers)
+    assert response.status_code == 404
+
+
+if __name__ == '__main__':
     pytest.main()

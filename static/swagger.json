@@ -22,7 +22,7 @@
             "name": "body",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/User"
+              "$ref": "#/definitions/UserWithRole"
             }
           }
         ],
@@ -105,7 +105,7 @@
             "name": "body",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/User"
+              "$ref": "#/definitions/UserWithRole"
             }
           }
         ],
@@ -348,6 +348,22 @@
         "password": {
           "type": "string",
           "format": "password"
+        }
+      },
+      "required": [
+        "username",
+        "password"
+      ]
+    },
+    "UserWithRole": {
+      "type": "object",
+      "properties": {
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string",
+          "format": "password"
         },
         "role": {
           "type": "string"
@@ -355,7 +371,8 @@
       },
       "required": [
         "username",
-        "password"
+        "password",
+        "role"
       ]
     },
     "Task": {
